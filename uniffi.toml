@@ -1,0 +1,6 @@
+[bindings.kotlin]
+package_name = "aethers"
+cdylib_name = "aethers"
+
+[bindings.swift]
+cdylib_name = "aethers"

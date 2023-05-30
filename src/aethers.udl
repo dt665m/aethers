@@ -1,0 +1,59 @@
+namespace aethers {
+  [Throws=WalletError]
+  string ec_recover([ByRef] sequence<u8> signature, [ByRef] sequence<u8> message);
+
+  [Throws=WalletError]
+  Wallet decrypt_json(string encrypted, string password);
+
+  [Throws=WalletError]
+  Wallet from_mnemonic(string mnemonic, string password);
+
+  [Throws=ProviderError]
+  ChainProvider provider_from_url([ByRef] string url);
+};
+
+[Error]
+enum WalletError {
+  "DerivationParse",
+  "Mnemonic",
+  "Signature",
+  "Serde",
+  "Encrypt",
+  "Decrypt",
+  "Utf8",
+  "WrongPassword",
+  "EthSignature",
+  "Provider",
+  "InsufficientGasFunds",
+};
+
+interface Wallet {
+  constructor(string password);
+
+  sequence<string> request_accounts();
+
+  [Throws=WalletError]
+  string encrypt_json();
+
+  [Throws=WalletError]
+  string recover_phrase(string password);
+
+  [Throws=WalletError]
+  string sign_typed_message([ByRef] sequence<u8> message);
+
+  [Throws=WalletError]
+  string send_transaction(ChainProvider provider, string payload);
+};
+
+[Error]
+enum ProviderError {
+  "Runtime",
+  "Parse",
+  "Inner",
+  "FromAddressMissing",
+};
+
+interface ChainProvider {
+  [Throws=ProviderError]
+  void send_transaction();
+};

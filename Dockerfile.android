@@ -1,0 +1,72 @@
+FROM debian:bullseye-slim AS build
+
+RUN apt-get update \
+    && apt-get install -y \
+        git \
+        wget \
+        unzip \
+        build-essential \
+        openjdk-11-jdk-headless \
+        --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --uid 1000 --create-home --shell /bin/bash dev
+USER dev
+WORKDIR "/home/dev"
+ENV HOME="/home/dev"
+
+# Set an environment variable for convenience.
+ENV GRADLE_ROOT=/home/dev/opt/gradle
+
+RUN mkdir -p ${GRADLE_ROOT}
+RUN wget https://services.gradle.org/distributions/gradle-7.5.1-bin.zip -O gradle-7.5.1-bin.zip \
+    && sha256sum gradle-7.5.1-bin.zip \
+    && echo "f6b8596b10cce501591e92f229816aa4046424f3b24d771751b06779d58c8ec4  gradle-7.5.1-bin.zip" | sha256sum -c - \
+    && unzip gradle-7.5.1-bin.zip -d ${GRADLE_ROOT} \
+    && rm gradle-7.5.1-bin.zip
+
+# Add the relevant directories to the $PATH.
+ENV PATH=${PATH}:${GRADLE_ROOT}/gradle-7.5.1/bin
+
+# Set the ${ANDROID_HOME} variable, so that the tools can find our installation.
+# See https://developer.android.com/studio/command-line/variables#envar.
+ENV ANDROID_HOME=${HOME}/opt/android-sdk
+
+# Download and extract the command-line tools into ${ANDROID_HOME}.
+RUN mkdir -p ${ANDROID_HOME}
+RUN wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip \
+        -O ${HOME}/commandlinetools-linux-8512546_latest.zip \
+    && unzip ${HOME}/commandlinetools-linux-8512546_latest.zip -d ${ANDROID_HOME}/cmdline-tools \
+    && rm ${HOME}/commandlinetools-linux-8512546_latest.zip
+
+# Add the relevant directories to the $PATH.
+ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/cmdline-tools/bin:${ANDROID_HOME}/platform-tools
+
+RUN yes | sdkmanager --licenses \
+    && sdkmanager --verbose \
+        "build-tools;33.0.1" \
+        "ndk;25.1.8937393" \
+        "platforms;android-33"
+ENV NDK_HOME=${ANDROID_HOME}/ndk/25.1.8937393
+
+RUN wget https://sh.rustup.rs -O rustup.sh \
+    && sh rustup.sh -y \
+    && rm rustup.sh \
+    && ${HOME}/.cargo/bin/rustup target add \
+        aarch64-linux-android \
+        armv7-linux-androideabi \
+        i686-linux-android \
+        x86_64-linux-android \
+    && ${HOME}/.cargo/bin/rustup toolchain install nightly \
+    && ${HOME}/.cargo/bin/rustup target add --toolchain nightly \
+        aarch64-linux-android \
+        armv7-linux-androideabi \
+        i686-linux-android \
+        x86_64-linux-android 
+
+ENV PATH=${PATH}:${HOME}/.cargo/bin
+
+RUN echo ${PATH} >> ${HOME}/out.log && ls ${HOME}/.cargo/bin >> ${HOME}/out.log
+RUN which cargo >> ${HOME}/out.log
+RUN rm -rf ${HOME}/.cargo/registry/*
+RUN cargo install --config net.git-fetch-with-cli=true cargo-ndk
