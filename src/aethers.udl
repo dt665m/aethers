@@ -3,13 +3,20 @@ namespace aethers {
   string ec_recover([ByRef] sequence<u8> signature, [ByRef] sequence<u8> message);
 
   [Throws=WalletError]
-  Wallet decrypt_json(string encrypted, string password);
+  Wallet decrypt_json_bytes([ByRef] sequence<u8> encrypted, [ByRef] sequence<u8> password, u64 chain_id);
 
   [Throws=WalletError]
-  Wallet from_mnemonic(string mnemonic, string password);
+  Wallet decrypt_json(string encrypted, string password, u64 chain_id);
+
+  [Throws=WalletError]
+  Wallet from_mnemonic(string mnemonic, string password, u64 chain_id);
 
   [Throws=ProviderError]
   ChainProvider provider_from_url([ByRef] string url);
+
+  void init_logger();
+
+  string impl_version();
 };
 
 [Error]
@@ -28,7 +35,7 @@ enum WalletError {
 };
 
 interface Wallet {
-  constructor(string password);
+  constructor(string password, u64 chain_id);
 
   sequence<string> request_accounts();
 
@@ -54,6 +61,4 @@ enum ProviderError {
 };
 
 interface ChainProvider {
-  [Throws=ProviderError]
-  void send_transaction();
 };

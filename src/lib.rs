@@ -15,10 +15,27 @@ use ethers_core::{
         transaction::{
             eip1559::Eip1559TransactionRequest as TransactionRequest, eip2718::TypedTransaction,
         },
-        Address, BlockNumber, Bytes, Signature, H256, U256,
+        Address, Bytes, Signature, H256, U256,
     },
     utils::{hash_message, secret_key_to_address},
 };
+
+#[cfg(target_os = "android")]
+pub fn init_logger() {
+    use android_logger::Config;
+    use log::LevelFilter;
+
+    android_logger::init_once(Config::default().with_max_level(LevelFilter::Info));
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn init_logger() {
+    let _ = env_logger::Builder::new().parse_filters("info").try_init();
+}
+
+pub fn impl_version() -> String {
+    env!("ATB_CLI_IMPL_VERSION").to_owned()
+}
 
 const DEFAULT_DERIVATION_PATH_PREFIX: &str = "m/44'/60'/0'/0/";
 
@@ -26,27 +43,27 @@ pub type WalletResult<T, E = WalletError> = std::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum WalletError {
-    #[error("")]
+    #[error("{0}")]
     DerivationParse(#[from] coins_bip32::Bip32Error),
-    #[error("")]
+    #[error("{0}")]
     Mnemonic(#[from] coins_bip39::MnemonicError),
-    #[error("")]
+    #[error("{0}")]
     Signature(#[from] k256::ecdsa::signature::Error),
-    #[error("")]
+    #[error("{0}")]
     Serde(#[from] serde_json::Error),
-    #[error("")]
+    #[error("{0}")]
     Encrypt(anyhow::Error),
     #[error("{0}")]
     Decrypt(anyhow::Error),
-    #[error("")]
+    #[error("{0}")]
     Utf8(#[from] std::str::Utf8Error),
-    #[error("")]
+    #[error("Incorrect password")]
     WrongPassword,
-    #[error("")]
+    #[error("{0}")]
     EthSignature(#[from] ethers_core::types::SignatureError),
-    #[error("")]
+    #[error("{0}")]
     Provider(#[from] ProviderError),
-    #[error("")]
+    #[error("Insufficent gas for transaction")]
     InsufficientGasFunds,
 }
 
@@ -56,17 +73,50 @@ pub fn ec_recover(signature: &[u8], message: &[u8]) -> WalletResult<String> {
     Ok(format!("0x{:02x}", addr))
 }
 
-pub fn decrypt_json(encrypted: String, password: String) -> WalletResult<Arc<Wallet>> {
-    let store: keystore::Keystore = serde_json::from_str(&encrypted)?;
-    let phrase_bytes = keystore::decrypt_key(store, &password).map_err(WalletError::Decrypt)?;
+pub fn decrypt_json_bytes(
+    encrypted_bytes: &[u8],
+    password_bytes: &[u8],
+    chain_id: u64,
+) -> WalletResult<Arc<Wallet>> {
+    log::info!(
+        "[rust] json payload: {}",
+        String::from_utf8_lossy(encrypted_bytes)
+    );
+    log::info!(
+        "[rust] password: {}",
+        String::from_utf8_lossy(password_bytes)
+    );
+    let store: keystore::Keystore = serde_json::from_slice(encrypted_bytes)?;
+    let phrase_bytes = keystore::decrypt_key(store, password_bytes).map_err(|e| {
+        log::info!("[rust] error: {e}");
+        WalletError::Decrypt(e)
+    })?;
     let mnemonic = Mnemonic::<English>::new_from_phrase(std::str::from_utf8(&phrase_bytes)?)?;
-    let inner = RwLock::new(WalletInner::new(mnemonic, password, 88888)?);
+    let inner = RwLock::new(WalletInner::new(
+        mnemonic,
+        String::from_utf8_lossy(password_bytes).to_string(),
+        chain_id,
+    )?);
     Ok(Arc::new(Wallet { inner }))
 }
 
-pub fn from_mnemonic(mnemonic_string: String, password: String) -> WalletResult<Arc<Wallet>> {
+pub fn decrypt_json(
+    encrypted: String,
+    password: String,
+    chain_id: u64,
+) -> WalletResult<Arc<Wallet>> {
+    log::info!("[rust] json payload: {encrypted}");
+    log::info!("[rust] password: {password}");
+    decrypt_json_bytes(encrypted.as_bytes(), password.as_bytes(), chain_id)
+}
+
+pub fn from_mnemonic(
+    mnemonic_string: String,
+    password: String,
+    chain_id: u64,
+) -> WalletResult<Arc<Wallet>> {
     let mnemonic = Mnemonic::<English>::new_from_phrase(&mnemonic_string)?;
-    let inner = RwLock::new(WalletInner::new(mnemonic, password, 88888)?);
+    let inner = RwLock::new(WalletInner::new(mnemonic, password, chain_id)?);
     Ok(Arc::new(Wallet { inner }))
 }
 
@@ -76,6 +126,7 @@ pub struct Wallet {
 
 struct WalletInner<T: Wordlist> {
     pub mnemonic: Mnemonic<T>,
+    #[allow(dead_code)]
     pub index: usize,
     pub chain_id: u64,
     pub signer: SigningKey,
@@ -107,11 +158,11 @@ impl<T: Wordlist> WalletInner<T> {
 //#NOTE destroy() is created by the scaffolding, essentially a "free" of the memory holding the
 //struct
 impl Wallet {
-    pub fn new(password: String) -> Self {
+    pub fn new(password: String, chain_id: u64) -> Self {
         let mut rng = rand::thread_rng();
         let mnemonic = Mnemonic::<English>::new(&mut rng);
         let inner = RwLock::new(
-            WalletInner::new(mnemonic, password, 1337)
+            WalletInner::new(mnemonic, password, chain_id)
                 .expect("default crypto bundle settings should succeed"),
         );
 
@@ -167,21 +218,23 @@ impl Wallet {
         provider: Arc<ChainProvider>,
         payload: String,
     ) -> WalletResult<String> {
-        println!("[rust] tx payload: {payload}");
+        log::info!("[rust] tx payload: {payload}");
         let inner = self.inner.read().unwrap();
         let address = inner.address;
         let mut request: TypedTransaction =
             serde_json::from_str::<TransactionRequest>(&payload)?.into();
-        println!("[rust] tx request: {request:?}");
+        log::info!("[rust] tx request: {request:?}");
+
         //#TODO convert to proper error
         assert_eq!(request.from(), Some(&address));
 
         let (sender_balance, gas_price, estimated_gas_used, chain_id) =
             provider.query_for_transaction(&request).map_err(|e| {
-                println!("[rust] query failed {e}");
+                log::info!("[rust] query failed {e}");
                 e
             })?;
-        println!("[rust] filling tx requirements: {sender_balance:?}, {gas_price:?}, {estimated_gas_used:?}, {chain_id:?}");
+        log::info!("[rust] filling tx requirements. sender balance: {sender_balance:?}, gas_price: {gas_price:?}, estimated_gas_used: {estimated_gas_used:?}, chain_id: {chain_id:?}");
+        //[rust] filling tx requirements: 2000420000000000000, 100000000000, 36715, 13370
 
         // validity checks
         let total_value = (gas_price * estimated_gas_used)
@@ -196,7 +249,10 @@ impl Wallet {
         // );
 
         let nonce = provider.get_transaction_count(address.clone())?;
-        request.set_nonce(nonce).set_chain_id(inner.chain_id);
+        request
+            .set_nonce(nonce)
+            .set_gas(estimated_gas_used)
+            .set_chain_id(inner.chain_id);
 
         //#NOTE this is nuanced, we are using the EIP1559TransactionRequest aliased to
         //TransactionRequest
@@ -209,12 +265,12 @@ impl Wallet {
         let sig_hash = request.sighash();
         let sig = self.sign_hash(sig_hash, Some(inner.chain_id))?;
 
-        println!("[rust] sending raw transaction");
+        log::info!("[rust] sending raw transaction");
         provider
             .send_raw_transaction(request.rlp_signed(&sig))
             .map(|h| format!("0x{h:02x}"))
             .map_err(|e| {
-                println!("[rust] send tx error: {e}");
+                log::info!("[rust] send tx error: {e}");
                 e.into()
             })
     }
@@ -273,14 +329,6 @@ struct ProviderInner {
 }
 
 impl ChainProvider {
-    pub fn send_transaction(&self) -> Result<(), ProviderError> {
-        let group = self.0.read().unwrap();
-        let block = group.rt.block_on(group.provider.get_block_number())?;
-
-        log::info!("queried block {}", block);
-        Ok(())
-    }
-
     pub fn get_transaction_count(&self, address: Address) -> Result<U256, ProviderError> {
         let group = self.0.read().unwrap();
         group
@@ -305,25 +353,13 @@ impl ChainProvider {
                     return Err(ProviderError::FromAddressMissing)
                 };
 
-            let balance = dbg!(provider.get_balance(*from, None).await?);
-            let gas_price = dbg!(provider.get_gas_price().await?);
-            let estimated = dbg!(
-                provider
-                    .estimate_gas(tx, Some(BlockNumber::Latest.into()))
-                    .await?
-            );
-            let chain_id = dbg!(provider.get_chainid().await?);
-            Ok((balance, gas_price, estimated, chain_id))
-
-            //"0x48802d6fc9b3d55f6f17e55aac88896089d5b327ac2d62b7555f33ed468a96e83bc6233ac367f1abbe37796844a1c840d7e3ae93ec57d4b8b1063256ff08ecf71c"
-
-            // futures::try_join!(
-            //     provider.get_balance(*from, None),
-            //     provider.get_gas_price(),
-            //     provider.estimate_gas(tx, None),
-            //     provider.get_chainid(),
-            // )
-            // .map_err(ProviderError::from)
+            futures::try_join!(
+                provider.get_balance(*from, None),
+                provider.get_gas_price(),
+                provider.estimate_gas(tx, None),
+                provider.get_chainid(),
+            )
+            .map_err(ProviderError::from)
         })
     }
 
@@ -343,7 +379,7 @@ impl ChainProvider {
 
 include!(concat!(env!("OUT_DIR"), "/aethers.uniffi.rs"));
 
-mod keystore {
+pub mod keystore {
     use aes::{
         cipher::{self, InnerIvInit, KeyInit, StreamCipherCore},
         Aes128,
@@ -495,7 +531,7 @@ mod keystore {
         }
     }
 
-    mod eth {
+    pub mod eth {
         use ethereum_types::H160 as Address;
         use k256::{ecdsa::SigningKey, elliptic_curve::sec1::ToEncodedPoint, PublicKey};
         use sha3::{Digest, Keccak256};
