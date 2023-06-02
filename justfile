@@ -77,7 +77,7 @@ test-swift:
 
 export CLASSPATH := OUTPUT_DIR / "jna-5.13.0.jar"
 test-kotlin: jna
-    cargo test --test test_generated_bindings
+    cargo test --test test_generated_bindings_kt
     
 test-kotlin-docker:
     docker run --platform linux/x86_64 --rm -ti -v ${PWD}:/home/dev/project gcr.io/aetheras-io/android-builder:latest \
