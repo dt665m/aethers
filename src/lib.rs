@@ -480,7 +480,7 @@ pub mod keystore {
                 c,
                 dklen,
                 prf: _,
-                salt,
+                ref salt,
             } => {
                 let mut key = vec![0u8; dklen as usize];
                 pbkdf2::<Hmac<Sha256>>(password.as_ref(), &salt, c, key.as_mut_slice());
@@ -491,7 +491,7 @@ pub mod keystore {
                 n,
                 p,
                 r,
-                salt,
+                ref salt,
             } => {
                 let mut key = vec![0u8; dklen as usize];
                 let log_n = (n as f32).log2() as u8;
@@ -504,14 +504,16 @@ pub mod keystore {
         };
 
         // Derive the MAC from the derived key and ciphertext.
+        log::info!("key: {:?}", key);
+        log::info!("keystore: {:?}", &keystore);
         let derived_mac = Keccak256::new()
             .chain(&key[16..32])
             .chain(&keystore.crypto.ciphertext)
             .finalize();
 
+        log::info!("derived mac: {:?}", derived_mac.as_slice());
+        log::info!("keystore mac: {:?}", keystore.crypto.mac.as_slice());
         if derived_mac.as_slice() != keystore.crypto.mac.as_slice() {
-            dbg!(derived_mac.as_slice());
-            dbg!(keystore.crypto.mac.as_slice());
             log::info!("derived: {:?}", derived_mac.as_slice());
             log::info!("keystore: {:?}", keystore.crypto.mac.as_slice());
             return Err(anyhow::anyhow!("Mac mismatch"));
