@@ -495,8 +495,11 @@ pub mod keystore {
             } => {
                 let mut key = vec![0u8; dklen as usize];
                 let log_n = (n as f32).log2() as u8;
+                log::info!("log_n: {}", log_n);
                 let scrypt_params = ScryptParams::new(log_n, r, p)
                     .map_err(|_e| anyhow::anyhow!("invalid scrypt params"))?;
+                log::info!("scrypt_params: {:?}", scrypt_params);
+                log::info!("salt: {:?}", salt);
                 scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())
                     .map_err(|_e| anyhow::anyhow!("scrypt failed"))?;
                 key
