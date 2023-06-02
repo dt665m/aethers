@@ -76,7 +76,7 @@ test-swift:
     cargo test --test test_generated_bindings
 
 export CLASSPATH := OUTPUT_DIR / "jna-5.13.0.jar"
-test-kotlin: jna
+test-kotlin:
     cargo test --test test_generated_bindings_kt
     
 test-kotlin-docker:

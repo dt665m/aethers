@@ -510,6 +510,8 @@ pub mod keystore {
             .finalize();
 
         if derived_mac.as_slice() != keystore.crypto.mac.as_slice() {
+            dbg!(derived_mac.as_slice());
+            dbg!(keystore.crypto.mac.as_slice());
             log::info!("derived: {:?}", derived_mac.as_slice());
             log::info!("keystore: {:?}", keystore.crypto.mac.as_slice());
             return Err(anyhow::anyhow!("Mac mismatch"));
