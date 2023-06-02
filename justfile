@@ -1,5 +1,21 @@
+set dotenv-load
+
+# Path and Variables
+ORG := "dt665m"
+PROJECT := "aethers"
+REPO := "https://github.com" / ORG / PROJECT
+ROOT_DIR := justfile_directory()
+OUTPUT_DIR := ROOT_DIR / "target"
+SEM_VER := `awk -F' = ' '$1=="version"{print $2;exit;}' ./Cargo.toml`
+
+default:
+    @just --choose
+
 ###########################################################
 ### Build 
+
+jna:
+    curl https://repo1.maven.org/maven2/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar --output target/jna-5.13.0.jar --silent
 
 deps:
     rustup target add \
@@ -59,7 +75,11 @@ swift-module:
 test-swift:
     cargo test --test test_generated_bindings
 
-test-kotlin:
+export CLASSPATH := OUTPUT_DIR / "jna-5.13.0.jar"
+test-kotlin: jna
+    echo $CLASSPATH
+
+test-kotlin-docker:
     docker run --platform linux/x86_64 --rm -ti -v ${PWD}:/home/dev/project gcr.io/aetheras-io/android-builder:latest \
     bash -c "cd project && cargo test --test test_generated_bindings_kt"
     

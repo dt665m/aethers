@@ -2,6 +2,7 @@ FROM debian:bullseye-slim AS build
 
 RUN apt-get update \
     && apt-get install -y \
+        zip \
         git \
         wget \
         unzip \
@@ -56,9 +57,14 @@ RUN wget https://sh.rustup.rs -O rustup.sh \
         aarch64-linux-android \
         armv7-linux-androideabi \
         i686-linux-android \
-        x86_64-linux-android \
-    && rustup component add cargo clippy rust-docs rust-std rustc rustfmt
- 
+        x86_64-linux-android
+
+RUN ${HOME}/.cargo/bin/rustup component add cargo clippy rust-docs rust-std rustc rustfmt \
+    && ${HOME}/.cargo/bin/cargo install --config net.git-fetch-with-cli=true cargo-ndk
+
 ENV PATH=${PATH}:${HOME}/.cargo/bin
 
-RUN cargo install --config net.git-fetch-with-cli=true cargo-ndk
+RUN wget -O sdk.install.sh "https://get.sdkman.io" \
+    && chmod +x ./sdk.install.sh \
+    && ./sdk.install.sh 
+

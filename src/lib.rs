@@ -79,16 +79,19 @@ pub fn decrypt_json_bytes(
     chain_id: u64,
 ) -> WalletResult<Arc<Wallet>> {
     log::info!(
-        "[rust] json payload: {}",
+        "[aethers] json payload: {}",
         String::from_utf8_lossy(encrypted_bytes)
     );
     log::info!(
-        "[rust] password: {}",
+        "[aethers] password: {}",
         String::from_utf8_lossy(password_bytes)
     );
+    log::info!("[aethers] password bytes: {:?}", password_bytes);
+    log::info!("[aethers] password length: {}", password_bytes.len(),);
+
     let store: keystore::Keystore = serde_json::from_slice(encrypted_bytes)?;
     let phrase_bytes = keystore::decrypt_key(store, password_bytes).map_err(|e| {
-        log::info!("[rust] error: {e}");
+        log::info!("[aethers] error: {e}");
         WalletError::Decrypt(e)
     })?;
     let mnemonic = Mnemonic::<English>::new_from_phrase(std::str::from_utf8(&phrase_bytes)?)?;
@@ -105,8 +108,6 @@ pub fn decrypt_json(
     password: String,
     chain_id: u64,
 ) -> WalletResult<Arc<Wallet>> {
-    log::info!("[rust] json payload: {encrypted}");
-    log::info!("[rust] password: {password}");
     decrypt_json_bytes(encrypted.as_bytes(), password.as_bytes(), chain_id)
 }
 
@@ -160,6 +161,13 @@ impl<T: Wordlist> WalletInner<T> {
 impl Wallet {
     pub fn new(password: String, chain_id: u64) -> Self {
         let mut rng = rand::thread_rng();
+        log::info!("[aethers] wallet: {password}");
+        log::info!("[aethers] wallet bytes: {:?}", password.as_bytes());
+        log::info!(
+            "[aethers] wallet password length: {}",
+            password.as_bytes().len()
+        );
+
         let mnemonic = Mnemonic::<English>::new(&mut rng);
         let inner = RwLock::new(
             WalletInner::new(mnemonic, password, chain_id)
@@ -218,23 +226,23 @@ impl Wallet {
         provider: Arc<ChainProvider>,
         payload: String,
     ) -> WalletResult<String> {
-        log::info!("[rust] tx payload: {payload}");
+        log::info!("[aethers] tx payload: {payload}");
         let inner = self.inner.read().unwrap();
         let address = inner.address;
         let mut request: TypedTransaction =
             serde_json::from_str::<TransactionRequest>(&payload)?.into();
-        log::info!("[rust] tx request: {request:?}");
+        log::info!("[aethers] tx request: {request:?}");
 
         //#TODO convert to proper error
         assert_eq!(request.from(), Some(&address));
 
         let (sender_balance, gas_price, estimated_gas_used, chain_id) =
             provider.query_for_transaction(&request).map_err(|e| {
-                log::info!("[rust] query failed {e}");
+                log::info!("[aethers] query failed {e}");
                 e
             })?;
-        log::info!("[rust] filling tx requirements. sender balance: {sender_balance:?}, gas_price: {gas_price:?}, estimated_gas_used: {estimated_gas_used:?}, chain_id: {chain_id:?}");
-        //[rust] filling tx requirements: 2000420000000000000, 100000000000, 36715, 13370
+        log::info!("[aethers] filling tx requirements. sender balance: {sender_balance:?}, gas_price: {gas_price:?}, estimated_gas_used: {estimated_gas_used:?}, chain_id: {chain_id:?}");
+        //[aethers] filling tx requirements: 2000420000000000000, 100000000000, 36715, 13370
 
         // validity checks
         let total_value = (gas_price * estimated_gas_used)
@@ -265,12 +273,12 @@ impl Wallet {
         let sig_hash = request.sighash();
         let sig = self.sign_hash(sig_hash, Some(inner.chain_id))?;
 
-        log::info!("[rust] sending raw transaction");
+        log::info!("[aethers] sending raw transaction");
         provider
             .send_raw_transaction(request.rlp_signed(&sig))
             .map(|h| format!("0x{h:02x}"))
             .map_err(|e| {
-                log::info!("[rust] send tx error: {e}");
+                log::info!("[aethers] send tx error: {e}");
                 e.into()
             })
     }
@@ -502,6 +510,8 @@ pub mod keystore {
             .finalize();
 
         if derived_mac.as_slice() != keystore.crypto.mac.as_slice() {
+            log::info!("derived: {:?}", derived_mac.as_slice());
+            log::info!("keystore: {:?}", keystore.crypto.mac.as_slice());
             return Err(anyhow::anyhow!("Mac mismatch"));
         }
 
