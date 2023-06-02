@@ -44,7 +44,7 @@ build-ios:
 
 build-android:
     docker run --platform linux/x86_64 --rm -ti -v ${PWD}:/home/dev/project gcr.io/aetheras-io/android-builder:latest \
-    bash -c "cd project && cargo ndk -t armeabi-v7a -t arm64-v8a -o ./target/jniLibs build --config net.git-fetch-with-cli=true --release"
+    bash -c "cd project && cargo ndk -t x86 -t x86_64 -t armeabi-v7a -t arm64-v8a -o ./target/jniLibs build --config net.git-fetch-with-cli=true --release"
 
 build-bindings: kotlin-bindings swift-bindings
 
