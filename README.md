@@ -43,3 +43,4 @@ DAppWebviewController.swift:
     - Call WKWebView+Extension to set state in the JS Shim (sometimes)
     - Call WkWebView+Extension to return RPC response to the JS Shim
     - An int64 ID is used to keep track of the request+response
+

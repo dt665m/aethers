@@ -78,22 +78,9 @@ pub fn decrypt_json_bytes(
     password_bytes: &[u8],
     chain_id: u64,
 ) -> WalletResult<Arc<Wallet>> {
-    log::info!(
-        "[aethers] json payload: {}",
-        String::from_utf8_lossy(encrypted_bytes)
-    );
-    log::info!(
-        "[aethers] password: {}",
-        String::from_utf8_lossy(password_bytes)
-    );
-    log::info!("[aethers] password bytes: {:?}", password_bytes);
-    log::info!("[aethers] password length: {}", password_bytes.len(),);
-
     let store: keystore::Keystore = serde_json::from_slice(encrypted_bytes)?;
-    let phrase_bytes = keystore::decrypt_key(store, password_bytes).map_err(|e| {
-        log::info!("[aethers] error: {e}");
-        WalletError::Decrypt(e)
-    })?;
+    let phrase_bytes =
+        keystore::decrypt_key(store, password_bytes).map_err(WalletError::Decrypt)?;
     let mnemonic = Mnemonic::<English>::new_from_phrase(std::str::from_utf8(&phrase_bytes)?)?;
     let inner = RwLock::new(WalletInner::new(
         mnemonic,
@@ -161,13 +148,6 @@ impl<T: Wordlist> WalletInner<T> {
 impl Wallet {
     pub fn new(password: String, chain_id: u64) -> Self {
         let mut rng = rand::thread_rng();
-        log::info!("[aethers] wallet: {password}");
-        log::info!("[aethers] wallet bytes: {:?}", password.as_bytes());
-        log::info!(
-            "[aethers] wallet password length: {}",
-            password.as_bytes().len()
-        );
-
         let mnemonic = Mnemonic::<English>::new(&mut rng);
         let inner = RwLock::new(
             WalletInner::new(mnemonic, password, chain_id)
@@ -494,15 +474,9 @@ pub mod keystore {
                 ref salt,
             } => {
                 let mut key = vec![0u8; dklen as usize];
-                // let log_n = (n as f32).log2() as u8;
                 let log_n = n.ilog2() as u8;
-                log::info!("n as f32 log2: {}", (n as f32).log2());
-                log::info!("n ilog2: {}", n.ilog2());
-                log::info!("log_n: {}", log_n);
                 let scrypt_params = ScryptParams::new(log_n, r, p)
                     .map_err(|_e| anyhow::anyhow!("invalid scrypt params"))?;
-                log::info!("scrypt_params: {:?}", scrypt_params);
-                log::info!("salt: {:?}", salt);
                 scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())
                     .map_err(|_e| anyhow::anyhow!("scrypt failed"))?;
                 key
@@ -510,16 +484,14 @@ pub mod keystore {
         };
 
         // Derive the MAC from the derived key and ciphertext.
-        log::info!("key: {:?}", key);
-        log::info!("keystore: {:?}", &keystore);
         let derived_mac = Keccak256::new()
             .chain(&key[16..32])
             .chain(&keystore.crypto.ciphertext)
             .finalize();
 
-        log::info!("derived mac: {:?}", derived_mac.as_slice());
-        log::info!("keystore mac: {:?}", keystore.crypto.mac.as_slice());
         if derived_mac.as_slice() != keystore.crypto.mac.as_slice() {
+            log::error!("derived mac: {:?}", derived_mac.as_slice());
+            log::error!("keystore mac: {:?}", keystore.crypto.mac.as_slice());
             return Err(anyhow::anyhow!("Mac mismatch"));
         }
 
