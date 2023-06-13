@@ -36,9 +36,11 @@ build-ios:
     mkdir -p target/lib/aarch64-apple-ios
     mkdir -p target/lib/aarch64-apple-ios-sim
 
+    cargo rustc -p aethers --lib --crate-type staticlib --release --target x86_64-apple-ios
     cargo rustc -p aethers --lib --crate-type staticlib --release --target aarch64-apple-ios
     cargo rustc -p aethers --lib --crate-type staticlib --release --target aarch64-apple-ios-sim
 
+    cp target/x86_64-apple-ios/release/libaethers.a target/lib/x86_64-apple-ios
     cp target/aarch64-apple-ios/release/libaethers.a target/lib/aarch64-apple-ios
     cp target/aarch64-apple-ios-sim/release/libaethers.a target/lib/aarch64-apple-ios-sim
 
