@@ -5,7 +5,9 @@ use std::{
 
 use coins_bip32::path::DerivationPath;
 use coins_bip39::{English, Mnemonic, Wordlist};
+use ethers_contract::BaseContract;
 use ethers_core::{
+    abi::Abi,
     k256::{
         ecdsa::{signature::hazmat::PrehashSigner, SigningKey},
         elliptic_curve::FieldBytes,
@@ -15,10 +17,22 @@ use ethers_core::{
         transaction::{
             eip1559::Eip1559TransactionRequest as TransactionRequest, eip2718::TypedTransaction,
         },
-        Address, Bytes, Signature, H256, U256,
+        Address, Bytes, NameOrAddress, Signature, H256, U256,
     },
     utils::{hash_message, secret_key_to_address},
 };
+use once_cell::sync::Lazy;
+
+/// Banksy supported chain type number.
+//#NOTE: If Banksy's support chain increase/decrease, this should also need to change.
+pub const BANKSY_CHAIN_TYPE_NUM: u64 = 5;
+
+pub const AMINOX_BRIDGE_ABI: &[u8] = include_bytes!("./abi/aminox_bridge.abi");
+pub static AMINOX_BRIDGE_CONTRACT: Lazy<BaseContract> = Lazy::new(|| {
+    Abi::load(AMINOX_BRIDGE_ABI)
+        .expect("aminox_bridge ABI is correct. qed")
+        .into()
+});
 
 #[cfg(target_os = "android")]
 pub fn init_logger() {
@@ -65,6 +79,10 @@ pub enum WalletError {
     Provider(#[from] ProviderError),
     #[error("Insufficent gas for transaction")]
     InsufficientGasFunds,
+    #[error("Invalid address")]
+    InvalidAddress,
+    #[error("{0}")]
+    AbiError(#[from] ethers_contract::AbiError),
 }
 
 pub fn ec_recover(signature: &[u8], message: &[u8]) -> WalletResult<String> {
@@ -256,7 +274,7 @@ impl Wallet {
         log::info!("[aethers] sending raw transaction");
         provider
             .send_raw_transaction(request.rlp_signed(&sig))
-            .map(|h| format!("0x{h:02x}"))
+            .map(|h| format!("{h:#02x}"))
             .map_err(|e| {
                 log::info!("[aethers] send tx error: {e}");
                 e.into()
@@ -281,6 +299,45 @@ impl Wallet {
         let s = U256::from_big_endian(s_bytes.as_slice());
 
         Ok(Signature { r, s, v })
+    }
+
+    /// Transfer bridge out on AminoX (ERC20)
+    pub fn transfer_bridge_out(
+        &self,
+        provider: Arc<ChainProvider>,
+        contract_address: String,
+        to: String,
+        value: u64,
+        chain_id: u64,
+        chain_type: u64,
+    ) -> WalletResult<String> {
+        assert!(chain_type <= BANKSY_CHAIN_TYPE_NUM);
+
+        let inner = self.inner.read().unwrap();
+        let from = inner.address;
+        let (contract_address, params) = (
+            Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?,
+            (
+                Address::from_str(&to).map_err(|_| WalletError::InvalidAddress)?,
+                U256::from(value),
+                U256::from(chain_id),
+                U256::from(chain_type),
+            ),
+        );
+        log::info!(
+            "[aethers] transferBridgeOut contract: {:#02x}, to: {:#02x}, value {}, chain id: {}, chain type: {}",
+            contract_address, params.0, params.1, params.2, params.3
+        );
+
+        let tx = TransactionRequest {
+            from: Some(from),
+            to: Some(NameOrAddress::Address(contract_address)),
+            data: Some(AMINOX_BRIDGE_CONTRACT.encode("transferBridgedOut", params)?),
+            ..Default::default()
+        };
+        let payload = serde_json::to_string(&tx)?;
+
+        self.send_transaction(provider, payload)
     }
 }
 

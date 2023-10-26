@@ -32,6 +32,8 @@ enum WalletError {
   "EthSignature",
   "Provider",
   "InsufficientGasFunds",
+  "InvalidAddress",
+  "AbiError",
 };
 
 interface Wallet {
@@ -50,6 +52,9 @@ interface Wallet {
 
   [Throws=WalletError]
   string send_transaction(ChainProvider provider, string payload);
+
+  [Throws=WalletError]
+  string transfer_bridge_out(ChainProvider provider, string contract_address, string to, u64 value, u64 chain_id, u64 chain_type);
 };
 
 [Error]
