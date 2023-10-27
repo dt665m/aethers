@@ -21,16 +21,19 @@ use ethers_core::{
     },
     utils::{hash_message, secret_key_to_address},
 };
+use ethers_providers::{Http, Middleware, Provider};
 use once_cell::sync::Lazy;
 
-/// Banksy supported chain type number.
-//#NOTE: If Banksy's support chain increase/decrease, this should also need to change.
-pub const BANKSY_CHAIN_TYPE_NUM: u64 = 5;
-
 pub const AMINOX_BRIDGE_ABI: &[u8] = include_bytes!("./abi/aminox_bridge.abi");
+pub const ERC721_ABI: &[u8] = include_bytes!("./abi/erc721.abi");
 pub static AMINOX_BRIDGE_CONTRACT: Lazy<BaseContract> = Lazy::new(|| {
     Abi::load(AMINOX_BRIDGE_ABI)
         .expect("aminox_bridge ABI is correct. qed")
+        .into()
+});
+pub static ERC721_CONTRACT: Lazy<BaseContract> = Lazy::new(|| {
+    Abi::load(ERC721_ABI)
+        .expect("erc721 ABI is correct. qed")
         .into()
 });
 
@@ -88,7 +91,7 @@ pub enum WalletError {
 pub fn ec_recover(signature: &[u8], message: &[u8]) -> WalletResult<String> {
     let sig: Signature = signature.try_into()?;
     let addr = sig.recover(message)?;
-    Ok(format!("0x{:02x}", addr))
+    Ok(format!("{:#02x}", addr))
 }
 
 pub fn decrypt_json_bytes(
@@ -180,7 +183,7 @@ impl Wallet {
     }
 
     pub fn request_accounts(&self) -> Vec<String> {
-        vec![format!("0x{:02x}", self.inner.read().unwrap().address)]
+        vec![format!("{:#02x}", self.inner.read().unwrap().address)]
     }
 
     pub fn sign_message(&self, message: &[u8]) -> WalletResult<String> {
@@ -301,6 +304,7 @@ impl Wallet {
         Ok(Signature { r, s, v })
     }
 
+    // ========== AminoX Bridge ==========
     /// Transfer bridge out on AminoX (ERC20)
     pub fn transfer_bridge_out(
         &self,
@@ -311,8 +315,6 @@ impl Wallet {
         chain_id: u64,
         chain_type: u64,
     ) -> WalletResult<String> {
-        assert!(chain_type <= BANKSY_CHAIN_TYPE_NUM);
-
         let inner = self.inner.read().unwrap();
         let from = inner.address;
         let (contract_address, params) = (
@@ -339,9 +341,138 @@ impl Wallet {
 
         self.send_transaction(provider, payload)
     }
-}
 
-use ethers_providers::{Http, Middleware, Provider};
+    // ========== NFT(ERC721) ==========
+    pub fn nft_mint(
+        &self,
+        provider: Arc<ChainProvider>,
+        contract_address: String,
+        to: String,
+        value: u64,
+    ) -> WalletResult<String> {
+        let inner = self.inner.read().unwrap();
+        let from = inner.address;
+        let contract_address =
+            Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
+        let to = Address::from_str(&to).map_err(|_| WalletError::InvalidAddress)?;
+
+        let tx = TransactionRequest {
+            from: Some(from),
+            to: Some(NameOrAddress::Address(contract_address)),
+            value: Some(U256::from(value)),
+            data: Some(ERC721_CONTRACT.encode("mint", to)?),
+            ..Default::default()
+        };
+
+        let payload = serde_json::to_string(&tx)?;
+        self.send_transaction(provider, payload)
+    }
+
+    pub fn nft_safe_transfer_from(
+        &self,
+        provider: Arc<ChainProvider>,
+        contract_address: String,
+        to: String,
+        token_id: u64,
+    ) -> WalletResult<String> {
+        let inner = self.inner.read().unwrap();
+        let from = inner.address;
+
+        let (contract_address, params) = (
+            Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?,
+            (
+                from.clone(),
+                Address::from_str(&to).map_err(|_| WalletError::InvalidAddress)?,
+                U256::from(token_id),
+            ),
+        );
+
+        let tx = TransactionRequest {
+            from: Some(from),
+            to: Some(NameOrAddress::Address(contract_address)),
+            data: Some(ERC721_CONTRACT.encode("safeTransferFrom", params)?),
+            ..Default::default()
+        };
+
+        let payload = serde_json::to_string(&tx)?;
+        self.send_transaction(provider, payload)
+    }
+
+    pub fn nft_owner_of(
+        &self,
+        provider: Arc<ChainProvider>,
+        contract_address: String,
+        token_id: u64,
+    ) -> WalletResult<String> {
+        let inner = self.inner.read().unwrap();
+        let from = inner.address;
+        let contract_address =
+            Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
+        let token_id = U256::from(token_id);
+
+        let tx: TypedTransaction = TransactionRequest {
+            from: Some(from),
+            to: Some(NameOrAddress::Address(contract_address)),
+            data: Some(ERC721_CONTRACT.encode("ownerOf", token_id)?),
+            ..Default::default()
+        }
+        .into();
+        let bytes = provider.call(&tx)?;
+
+        ERC721_CONTRACT
+            .decode_output("ownerOf", bytes)
+            .map(|a: Address| format!("{a:#02x}"))
+            .map_err(Into::into)
+    }
+
+    pub fn nft_current_price(
+        &self,
+        provider: Arc<ChainProvider>,
+        contract_address: String,
+    ) -> WalletResult<u64> {
+        let inner = self.inner.read().unwrap();
+        let from = inner.address;
+        let contract_address =
+            Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
+
+        let tx: TypedTransaction = TransactionRequest {
+            from: Some(from),
+            to: Some(NameOrAddress::Address(contract_address)),
+            data: Some(ERC721_CONTRACT.encode("currentPrice", ())?),
+            ..Default::default()
+        }
+        .into();
+        let bytes = provider.call(&tx)?;
+
+        ERC721_CONTRACT
+            .decode_output("currentPrice", bytes)
+            .map_err(Into::into)
+    }
+
+    pub fn nft_total_supply(
+        &self,
+        provider: Arc<ChainProvider>,
+        contract_address: String,
+    ) -> WalletResult<u64> {
+        let inner = self.inner.read().unwrap();
+        let from = inner.address;
+        let contract_address =
+            Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
+
+        let tx: TypedTransaction = TransactionRequest {
+            from: Some(from),
+            to: Some(NameOrAddress::Address(contract_address)),
+            data: Some(ERC721_CONTRACT.encode("totalSupply", ())?),
+            ..Default::default()
+        }
+        .into();
+        let bytes = provider.call(&tx)?;
+
+        ERC721_CONTRACT
+            .decode_output("totalSupply", bytes)
+            .map_err(Into::into)
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
@@ -420,6 +551,15 @@ impl ChainProvider {
                 .map_err(Into::into)
         })
     }
+
+    pub fn call(&self, tx: &TypedTransaction) -> Result<Bytes, ProviderError> {
+        let group = self.0.read().unwrap();
+        group.rt.block_on(async {
+            let provider = &group.provider;
+
+            provider.call(tx, None).await.map_err(Into::into)
+        })
+    }
 }
 
 include!(concat!(env!("OUT_DIR"), "/aethers.uniffi.rs"));
@@ -430,7 +570,6 @@ pub mod keystore {
         Aes128,
     };
     use digest::{Digest, Update};
-    // use ethereum_types::H160 as Address;
     use hmac::Hmac;
     use pbkdf2::pbkdf2;
     use rand::{CryptoRng, Rng};
