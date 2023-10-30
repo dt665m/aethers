@@ -24,6 +24,13 @@ func testNewWallet() {
     print("new wallet phrase:", phrase)
     let address = newWallet.requestAccounts()
     print("new wallet address:", address)
+
+    let chainId = newWallet.chainId();
+    print("chain Id:", chainId)
+
+    newWallet.switchChain(chainId: 13371);
+    let newChainId = newWallet.chainId();
+    print("new chain Id:", newChainId)
 }
 
 func testNft() {

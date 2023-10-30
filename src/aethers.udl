@@ -34,12 +34,18 @@ enum WalletError {
   "InsufficientGasFunds",
   "InvalidAddress",
   "AbiError",
+  "FromAddressMismatch",
+  "ChainIdMismatch",
 };
 
 interface Wallet {
   constructor(string password, u64 chain_id);
 
   sequence<string> request_accounts();
+
+  u64 chain_id();
+
+  void switch_chain(u64 chain_id);
 
   [Throws=WalletError]
   string encrypt_json();

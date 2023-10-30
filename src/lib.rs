@@ -86,6 +86,10 @@ pub enum WalletError {
     InvalidAddress,
     #[error("{0}")]
     AbiError(#[from] ethers_contract::AbiError),
+    #[error("Wallet address and transaction from address do not match")]
+    FromAddressMismatch,
+    #[error("Wallet's chain id doesn't match either the transaction's or the provider's chain id")]
+    ChainIdMismatch,
 }
 
 pub fn ec_recover(signature: &[u8], message: &[u8]) -> WalletResult<String> {
@@ -203,7 +207,10 @@ impl Wallet {
         Ok(format!("{sig}"))
     }
 
-    pub fn switch_chain() {}
+    pub fn switch_chain(&self, chain_id: u64) {
+        let mut inner = self.inner.write().unwrap();
+        inner.chain_id = chain_id;
+    }
 
     pub fn encrypt_json(&self) -> WalletResult<String> {
         let mut rng = rand::thread_rng();
@@ -234,8 +241,9 @@ impl Wallet {
             serde_json::from_str::<TransactionRequest>(&payload)?.into();
         log::info!("[aethers] tx request: {request:?}");
 
-        //#TODO convert to proper error
-        assert_eq!(request.from(), Some(&address));
+        if request.from() != Some(&address) {
+            return Err(WalletError::FromAddressMismatch);
+        }
 
         let (sender_balance, gas_price, estimated_gas_used, chain_id) =
             provider.query_for_transaction(&request).map_err(|e| {
@@ -245,17 +253,18 @@ impl Wallet {
         log::info!("[aethers] filling tx requirements. sender balance: {sender_balance:?}, gas_price: {gas_price:?}, estimated_gas_used: {estimated_gas_used:?}, chain_id: {chain_id:?}");
         //[aethers] filling tx requirements: 2000420000000000000, 100000000000, 36715, 13370
 
+        if inner.chain_id != chain_id.as_u64()
+            || Some(inner.chain_id) != request.chain_id().map(|u| u.as_u64())
+        {
+            return Err(WalletError::ChainIdMismatch);
+        }
+
         // validity checks
         let total_value = (gas_price * estimated_gas_used)
             + request.value().map(|v| *v).unwrap_or_else(|| U256::zero());
         if sender_balance < total_value {
             return Err(WalletError::InsufficientGasFunds);
         }
-        // //#TODO convert to proper error
-        // assert_eq!(
-        //     request.chain_id().map(|u| u.as_u64()),
-        //     Some(chain_id.as_u64())
-        // );
 
         let nonce = provider.get_transaction_count(address.clone())?;
         request
@@ -405,11 +414,15 @@ impl Wallet {
         token_id: u64,
     ) -> WalletResult<String> {
         let inner = self.inner.read().unwrap();
+
+        if inner.chain_id != provider.chain_id()?.as_u64() {
+            return Err(WalletError::ChainIdMismatch);
+        }
+
         let from = inner.address;
         let contract_address =
             Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
         let token_id = U256::from(token_id);
-
         let tx: TypedTransaction = TransactionRequest {
             from: Some(from),
             to: Some(NameOrAddress::Address(contract_address)),
@@ -417,8 +430,8 @@ impl Wallet {
             ..Default::default()
         }
         .into();
-        let bytes = provider.call(&tx)?;
 
+        let bytes = provider.call(&tx)?;
         ERC721_CONTRACT
             .decode_output("ownerOf", bytes)
             .map(|a: Address| format!("{a:#02x}"))
@@ -431,10 +444,14 @@ impl Wallet {
         contract_address: String,
     ) -> WalletResult<u64> {
         let inner = self.inner.read().unwrap();
+
+        if inner.chain_id != provider.chain_id()?.as_u64() {
+            return Err(WalletError::ChainIdMismatch);
+        }
+
         let from = inner.address;
         let contract_address =
             Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
-
         let tx: TypedTransaction = TransactionRequest {
             from: Some(from),
             to: Some(NameOrAddress::Address(contract_address)),
@@ -442,8 +459,8 @@ impl Wallet {
             ..Default::default()
         }
         .into();
-        let bytes = provider.call(&tx)?;
 
+        let bytes = provider.call(&tx)?;
         ERC721_CONTRACT
             .decode_output("currentPrice", bytes)
             .map_err(Into::into)
@@ -455,10 +472,14 @@ impl Wallet {
         contract_address: String,
     ) -> WalletResult<u64> {
         let inner = self.inner.read().unwrap();
+
+        if inner.chain_id != provider.chain_id()?.as_u64() {
+            return Err(WalletError::ChainIdMismatch);
+        }
+
         let from = inner.address;
         let contract_address =
             Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
-
         let tx: TypedTransaction = TransactionRequest {
             from: Some(from),
             to: Some(NameOrAddress::Address(contract_address)),
@@ -466,8 +487,8 @@ impl Wallet {
             ..Default::default()
         }
         .into();
-        let bytes = provider.call(&tx)?;
 
+        let bytes = provider.call(&tx)?;
         ERC721_CONTRACT
             .decode_output("totalSupply", bytes)
             .map_err(Into::into)
@@ -536,6 +557,15 @@ impl ChainProvider {
                 provider.get_chainid(),
             )
             .map_err(ProviderError::from)
+        })
+    }
+
+    pub fn chain_id(&self) -> Result<U256, ProviderError> {
+        let group = self.0.read().unwrap();
+        group.rt.block_on(async {
+            let provider = &group.provider;
+
+            provider.get_chainid().await.map_err(ProviderError::from)
         })
     }
 
