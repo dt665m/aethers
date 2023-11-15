@@ -32,12 +32,20 @@ enum WalletError {
   "EthSignature",
   "Provider",
   "InsufficientGasFunds",
+  "InvalidAddress",
+  "AbiError",
+  "FromAddressMismatch",
+  "ChainIdMismatch",
 };
 
 interface Wallet {
   constructor(string password, u64 chain_id);
 
   sequence<string> request_accounts();
+
+  u64 chain_id();
+
+  void switch_chain(u64 chain_id);
 
   [Throws=WalletError]
   string encrypt_json();
@@ -50,6 +58,24 @@ interface Wallet {
 
   [Throws=WalletError]
   string send_transaction(ChainProvider provider, string payload);
+
+  [Throws=WalletError]
+  string transfer_bridge_out(ChainProvider provider, string contract, string to, u64 value, u64 chain_id, u64 chain_type);
+
+  [Throws=WalletError]
+  string nft_mint(ChainProvider provider, string contract, string to, u64 value);
+
+  [Throws=WalletError]
+  string nft_safe_transfer_from(ChainProvider provider, string contract, string to, u64 token_id);
+
+  [Throws=WalletError]
+  string nft_owner_of(ChainProvider provider, string contract, u64 token_id);
+  
+  [Throws=WalletError]
+  u64 nft_current_price(ChainProvider provider, string contract);
+
+  [Throws=WalletError]
+  u64 nft_total_supply(ChainProvider provider, string contract);
 };
 
 [Error]
