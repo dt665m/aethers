@@ -63,7 +63,7 @@ interface Wallet {
   string transfer_bridge_out(ChainProvider provider, string contract, string to, u64 value, u64 chain_id, u64 chain_type);
 
   [Throws=WalletError]
-  u64 token_balance_of(ChainProvider provider, string contract, string who);
+  u64 token_balance_of(ChainProvider provider, string contract, string address);
 
   [Throws=WalletError]
   string token_transfer(ChainProvider provider, string contract, string to, u64 value);

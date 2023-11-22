@@ -260,9 +260,7 @@ impl Wallet {
         log::info!("[aethers] filling tx requirements. sender balance: {sender_balance:?}, gas_price: {gas_price:?}, estimated_gas_used: {estimated_gas_used:?}, chain_id: {chain_id:?}");
         //[aethers] filling tx requirements: 2000420000000000000, 100000000000, 36715, 13370
 
-        if inner.chain_id != chain_id.as_u64()
-            || Some(inner.chain_id) != request.chain_id().map(|u| u.as_u64())
-        {
+        if inner.chain_id != chain_id.as_u64() {
             return Err(WalletError::ChainIdMismatch);
         }
 
@@ -332,9 +330,6 @@ impl Wallet {
         chain_type: u64,
     ) -> WalletResult<String> {
         let inner = self.inner.read().unwrap();
-        if inner.chain_id != provider.chain_id()?.as_u64() {
-            return Err(WalletError::ChainIdMismatch);
-        }
 
         let (contract_address, params) = (
             Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?,
@@ -398,9 +393,6 @@ impl Wallet {
         value: u64,
     ) -> WalletResult<String> {
         let inner = self.inner.read().unwrap();
-        if inner.chain_id != provider.chain_id()?.as_u64() {
-            return Err(WalletError::ChainIdMismatch);
-        }
 
         let contract_address =
             Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
@@ -428,9 +420,6 @@ impl Wallet {
         value: u64,
     ) -> WalletResult<String> {
         let inner = self.inner.read().unwrap();
-        if inner.chain_id != provider.chain_id()?.as_u64() {
-            return Err(WalletError::ChainIdMismatch);
-        }
 
         let contract_address =
             Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
@@ -459,9 +448,6 @@ impl Wallet {
         value: u64,
     ) -> WalletResult<String> {
         let inner = self.inner.read().unwrap();
-        if inner.chain_id != provider.chain_id()?.as_u64() {
-            return Err(WalletError::ChainIdMismatch);
-        }
 
         let contract_address =
             Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
@@ -491,9 +477,6 @@ impl Wallet {
         value: u64,
     ) -> WalletResult<String> {
         let inner = self.inner.read().unwrap();
-        if inner.chain_id != provider.chain_id()?.as_u64() {
-            return Err(WalletError::ChainIdMismatch);
-        }
 
         let contract_address =
             Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?;
@@ -519,9 +502,6 @@ impl Wallet {
         token_id: u64,
     ) -> WalletResult<String> {
         let inner = self.inner.read().unwrap();
-        if inner.chain_id != provider.chain_id()?.as_u64() {
-            return Err(WalletError::ChainIdMismatch);
-        }
 
         let (contract_address, params) = (
             Address::from_str(&contract_address).map_err(|_| WalletError::InvalidAddress)?,
