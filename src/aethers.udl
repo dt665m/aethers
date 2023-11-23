@@ -58,36 +58,6 @@ interface Wallet {
 
   [Throws=WalletError]
   string send_transaction(ChainProvider provider, string payload);
-
-  [Throws=WalletError]
-  string transfer_bridge_out(ChainProvider provider, string contract, string to, u64 value, u64 chain_id, u64 chain_type);
-
-  [Throws=WalletError]
-  u64 token_balance_of(ChainProvider provider, string contract, string address);
-
-  [Throws=WalletError]
-  string token_transfer(ChainProvider provider, string contract, string to, u64 value);
-
-  [Throws=WalletError]
-  string token_approve(ChainProvider provider, string contract, string spender, u64 value);
-
-  [Throws=WalletError]
-  string token_transfer_from(ChainProvider provider, string contract, string from, string to, u64 value);
-
-  [Throws=WalletError]
-  string nft_mint(ChainProvider provider, string contract, string to, u64 value);
-
-  [Throws=WalletError]
-  string nft_safe_transfer_from(ChainProvider provider, string contract, string to, u64 token_id);
-
-  [Throws=WalletError]
-  string nft_owner_of(ChainProvider provider, string contract, u64 token_id);
-  
-  [Throws=WalletError]
-  u64 nft_current_price(ChainProvider provider, string contract);
-
-  [Throws=WalletError]
-  u64 nft_total_supply(ChainProvider provider, string contract);
 };
 
 [Error]
@@ -99,4 +69,54 @@ enum ProviderError {
 };
 
 interface ChainProvider {
+};
+
+
+[Error]
+enum ContractError {
+  "InvalidAddress",
+  "LoadAbiError",
+  "Serde",
+  "AbiError",
+  "Provider",
+  "Wallet",
+  "ChainIdMismatch",
+};
+
+interface Contract {
+  [Throws=ContractError]
+  constructor(string address, ChainProvider provider, Wallet wallet);
+
+  [Throws=ContractError]
+  string transfer_bridge_out(string to, u64 value, u64 chain_id, u64 chain_type);
+
+  [Throws=ContractError]
+  u64 token_decimals();
+
+  [Throws=ContractError]
+  u64 token_balance_of(string address);
+
+  [Throws=ContractError]
+  string token_transfer(string to, u64 value);
+
+  [Throws=ContractError]
+  string token_approve(string spender, u64 value);
+
+  [Throws=ContractError]
+  string token_transfer_from(string from, string to, u64 value);
+
+  [Throws=ContractError]
+  string nft_mint(string to, u64 value);
+
+  [Throws=ContractError]
+  string nft_safe_transfer_from(string to, u64 token_id);
+
+  [Throws=ContractError]
+  string nft_owner_of(u64 token_id);
+  
+  [Throws=ContractError]
+  u64 nft_current_price();
+
+  [Throws=ContractError]
+  u64 nft_total_supply();
 };
