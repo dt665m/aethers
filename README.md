@@ -1,4 +1,4 @@
-#
+# Aethers Shared Library
 
 ## Android Targets 
 - aarch64-linux-android(arm64-v8a)
@@ -24,7 +24,7 @@
 
 ### Trust Wallet Integration
 Trust Wallet Provider's setup is broken down into the Javascript portion and the Native to Javascript
-binding.  The Provider is in the following way:
+binding.  The Provider works in the following way:
 
 TrustWalletProvider.swift:
 - The native code holds config values such as chain, network and provider url as strings
