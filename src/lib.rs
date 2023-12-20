@@ -143,7 +143,7 @@ impl<T: Wordlist> WalletInner<T> {
         let index = 0;
         let derivation_path =
             DerivationPath::from_str(&format!("{}{}", DEFAULT_DERIVATION_PATH_PREFIX, index))?;
-        let derived_priv_key = mnemonic.derive_key(&derivation_path, None)?;
+        let derived_priv_key = mnemonic.derive_key(derivation_path, None)?;
         let key: &coins_bip32::prelude::SigningKey = derived_priv_key.as_ref();
         let signer = SigningKey::from_bytes(&key.to_bytes())?;
         let address = secret_key_to_address(&signer);
@@ -249,13 +249,13 @@ impl Wallet {
         }
 
         // validity checks
-        let total_value = (gas_price * estimated_gas_used)
-            + request.value().map(|v| *v).unwrap_or_else(|| U256::zero());
+        let total_value =
+            (gas_price * estimated_gas_used) + request.value().cloned().unwrap_or_else(U256::zero);
         if sender_balance < total_value {
             return Err(WalletError::InsufficientGasFunds);
         }
 
-        let nonce = provider.get_transaction_count(address.clone())?;
+        let nonce = provider.get_transaction_count(address)?;
         request
             .set_nonce(nonce)
             .set_gas(estimated_gas_used)
@@ -263,7 +263,7 @@ impl Wallet {
 
         //#NOTE this is nuanced, we are using the EIP1559TransactionRequest aliased to
         //TransactionRequest
-        let mut tx_ref = request
+        let tx_ref = request
             .as_eip1559_mut()
             .expect("its set up top a few lines, duh.");
         tx_ref.max_fee_per_gas = Some(gas_price);
@@ -341,7 +341,7 @@ impl ChainProvider {
             .block_on(
                 group
                     .provider
-                    .get_transaction_count::<Address>(address.into(), None),
+                    .get_transaction_count::<Address>(address, None),
             )
             .map_err(ProviderError::from)
     }
@@ -824,7 +824,7 @@ pub mod keystore {
                 ref salt,
             } => {
                 let mut key = vec![0u8; dklen as usize];
-                pbkdf2::<Hmac<Sha256>>(password.as_ref(), &salt, c, key.as_mut_slice());
+                pbkdf2::<Hmac<Sha256>>(password.as_ref(), salt, c, key.as_mut_slice());
                 key
             }
             KdfparamsType::Scrypt {
@@ -838,7 +838,7 @@ pub mod keystore {
                 let log_n = n.ilog2() as u8;
                 let scrypt_params = ScryptParams::new(log_n, r, p)
                     .map_err(|_e| anyhow::anyhow!("invalid scrypt params"))?;
-                scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())
+                scrypt(password.as_ref(), salt, &scrypt_params, key.as_mut_slice())
                     .map_err(|_e| anyhow::anyhow!("scrypt failed"))?;
                 key
             }
@@ -989,7 +989,7 @@ pub mod keystore {
         {
             use serde::de::Error;
             String::deserialize(deserializer).and_then(|string| {
-                Vec::from_hex(&string).map_err(|err| Error::custom(err.to_string()))
+                Vec::from_hex(string).map_err(|err| Error::custom(err.to_string()))
             })
         }
     }
