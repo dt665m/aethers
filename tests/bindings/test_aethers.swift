@@ -35,7 +35,7 @@ func testNewWallet() {
 }
 
 func testNft() {
-    let contract = try! Contract(address: nftContractAddress, provider: provider, wallet: wallet);
+    let contract = try! Erc721Contract(address: nftContractAddress, provider: provider, wallet: wallet);
     let price = try! contract.nftCurrentPrice();
     assert(10_000_000_000_000_000 == price)
 
@@ -47,13 +47,13 @@ func testNft() {
 }
 
 func testTransferBridgeOut() {
-    let contract = try! Contract(address: bridgeContractAddress, provider: provider, wallet: wallet);
+    let contract = try! Erc20Contract(address: bridgeContractAddress, provider: provider, wallet: wallet);
     let txHash = try! contract.transferBridgeOut(to: "0x46594bb57b9CcA5a4B2c968E3A4bAFb258587308", value: 100, chainId: 0, chainType: 7);
     print("transferBridgeOut tx hash:", txHash)
 }
 
 func testErc20() {
-    let contract = try! Contract(address: erc20ContractAddress, provider: provider, wallet: wallet);
+    let contract = try! Erc20Contract(address: erc20ContractAddress, provider: provider, wallet: wallet);
     let balance = try! contract.tokenBalanceOf(address: "0xce381ddac7207129d81431604332a7c016492aa6");
     print("erc20 balance:", balance)
 
