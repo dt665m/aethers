@@ -355,8 +355,8 @@ impl ChainProvider {
             let provider = &group.provider;
 
             let Some(from) = tx.from() else {
-                    return Err(ProviderError::FromAddressMissing)
-                };
+                return Err(ProviderError::FromAddressMissing);
+            };
 
             futures::try_join!(
                 provider.get_balance(*from, None),
@@ -418,16 +418,15 @@ pub enum ContractError {
     ChainIdMismatch,
 }
 
-pub struct Contract {
+pub struct Erc20Contract {
     bridge: BaseContract,
     erc20: BaseContract,
-    erc721: BaseContract,
     address: Address,
     provider: Arc<ChainProvider>,
     wallet: Arc<Wallet>,
 }
 
-impl Contract {
+impl Erc20Contract {
     pub fn new(
         address: String,
         provider: Arc<ChainProvider>,
@@ -440,14 +439,10 @@ impl Contract {
         let erc20 = Abi::load(ERC20_ABI)
             .map_err(|_| ContractError::LoadAbiError)?
             .into();
-        let erc721 = Abi::load(ERC721_ABI)
-            .map_err(|_| ContractError::LoadAbiError)?
-            .into();
 
-        Ok(Contract {
+        Ok(Self {
             bridge,
             erc20,
-            erc721,
             address,
             provider,
             wallet,
@@ -598,6 +593,33 @@ impl Contract {
         self.wallet
             .send_transaction(self.provider.clone(), payload)
             .map_err(Into::into)
+    }
+}
+
+pub struct Erc721Contract {
+    erc721: BaseContract,
+    address: Address,
+    provider: Arc<ChainProvider>,
+    wallet: Arc<Wallet>,
+}
+
+impl Erc721Contract {
+    pub fn new(
+        address: String,
+        provider: Arc<ChainProvider>,
+        wallet: Arc<Wallet>,
+    ) -> ContractResult<Self> {
+        let address = Address::from_str(&address).map_err(|_| ContractError::InvalidAddress)?;
+        let erc721 = Abi::load(ERC721_ABI)
+            .map_err(|_| ContractError::LoadAbiError)?
+            .into();
+
+        Ok(Self {
+            erc721,
+            address,
+            provider,
+            wallet,
+        })
     }
 
     // ========== NFT(ERC721) ==========

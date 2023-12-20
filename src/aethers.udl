@@ -83,7 +83,7 @@ enum ContractError {
   "ChainIdMismatch",
 };
 
-interface Contract {
+interface Erc20Contract {
   [Throws=ContractError]
   constructor(string address, ChainProvider provider, Wallet wallet);
 
@@ -104,6 +104,11 @@ interface Contract {
 
   [Throws=ContractError]
   string token_transfer_from(string from, string to, u64 value);
+};
+
+interface Erc721Contract {
+  [Throws=ContractError]
+  constructor(string address, ChainProvider provider, Wallet wallet);
 
   [Throws=ContractError]
   string nft_mint(string to, u64 value);
