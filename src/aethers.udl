@@ -32,12 +32,20 @@ enum WalletError {
   "EthSignature",
   "Provider",
   "InsufficientGasFunds",
+  "InvalidAddress",
+  "AbiError",
+  "FromAddressMismatch",
+  "ChainIdMismatch",
 };
 
 interface Wallet {
   constructor(string password, u64 chain_id);
 
   sequence<string> request_accounts();
+
+  u64 chain_id();
+
+  void switch_chain(u64 chain_id);
 
   [Throws=WalletError]
   string encrypt_json();
@@ -61,4 +69,59 @@ enum ProviderError {
 };
 
 interface ChainProvider {
+};
+
+
+[Error]
+enum ContractError {
+  "InvalidAddress",
+  "LoadAbiError",
+  "Serde",
+  "AbiError",
+  "Provider",
+  "Wallet",
+  "ChainIdMismatch",
+};
+
+interface Erc20Contract {
+  [Throws=ContractError]
+  constructor(string address, ChainProvider provider, Wallet wallet);
+
+  [Throws=ContractError]
+  string transfer_bridge_out(string to, u64 value, u64 chain_id, u64 chain_type);
+
+  [Throws=ContractError]
+  u64 token_decimals();
+
+  [Throws=ContractError]
+  u64 token_balance_of(string address);
+
+  [Throws=ContractError]
+  string token_transfer(string to, u64 value);
+
+  [Throws=ContractError]
+  string token_approve(string spender, u64 value);
+
+  [Throws=ContractError]
+  string token_transfer_from(string from, string to, u64 value);
+};
+
+interface Erc721Contract {
+  [Throws=ContractError]
+  constructor(string address, ChainProvider provider, Wallet wallet);
+
+  [Throws=ContractError]
+  string nft_mint(string to, u64 value);
+
+  [Throws=ContractError]
+  string nft_safe_transfer_from(string to, u64 token_id);
+
+  [Throws=ContractError]
+  string nft_owner_of(u64 token_id);
+  
+  [Throws=ContractError]
+  u64 nft_current_price();
+
+  [Throws=ContractError]
+  u64 nft_total_supply();
 };
